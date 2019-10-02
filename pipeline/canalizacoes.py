@@ -40,54 +40,98 @@ X_treino, X_valid, y_treino, y_valid = train_test_split(X, y,
 
 """Dos dados de treino, vamos selecionar as colunas categóricas com baixa cardinalidade, menor do que 10."""
 
-colunas_cat = [coluna for coluna in X_treino.columns if
-                    X_treino[coluna].nunique() < 10 and 
-                    X_treino[coluna].dtype == "object"]
+colunas_cat = [coluna for coluna in X_treino.columns 
+               if X_treino[coluna].nunique() < 10 
+               and X_treino[coluna].dtype == "object"]
 
 """Agora vamos selecionar as colunas numéricas."""
 
-colunas_num = [coluna for coluna in X_treino.columns if 
-               X_treino[coluna].dtype in ['int64', 'float64']]
+colunas_num = [coluna for coluna in X_treino.columns 
+               if X_treino[coluna].dtype in ['int64', 'float64']]
 
-"""Das colunas que selecionamos, vamos manter apenas elas nos dados de validacao, treino e teste."""
+"""Das colunas que selecionamos, vamos manter apenas elas nos dados de validacao, treino e teste.
+
+Como fazemos para usar todas as colunas que selecionamos? Juntamos com +.
+"""
 
 colunas_selecionadas = colunas_cat + colunas_num
+
+"""Feito isso, vamos usar apenas essas colunas nos nossos dados de treino, teste e validação. Então vamos copia-las para novos Xs."""
 
 X_treino_selec = X_treino[colunas_selecionadas].copy()
 X_valid_selec = X_valid[colunas_selecionadas].copy()
 X_teste_selec = dados_teste[colunas_selecionadas].copy()
 
-"""Beleza, agora podemos organizar a nossa pipeline.
+"""Beleza, agora podemos organizar a nossa pipeline. A pipeline é uma sequência de passos. Esses passos geralmente involvem as etapas de preprocessamento e um modelo. Chamamos esses passos de steps.
 
 Ela vai ser algo assim:
 """
 
-pipeline_1 = Pipeline(steps = [(preprocessador,
-                                modelo)])
+steps = [(preprocessador, modelo)]
+
+pipeline_1 = Pipeline(steps)
 
 """Para isso, precisamos criar os preprocessadores. Quais são eles?
 
 Os imputadores e encoders para processar os dados numericos e categoricos. Certo?
 
 Como eles usam o fit transform, vamos chama-los de transformers.
+
+Primeiro, para transformar os dados numéricos, vamos usar o simple imputer.
 """
 
-transformer_num = SimpleImputer(strategy='constant')
+transformer_num = SimpleImputer(strategy='mean')
 
-transformer_cat = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='constant')),
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))
-])
+"""E para os nossos dados categóricos, queremos usar o simple imputer e o one hot encoding, certo? Vamos escrevê-los."""
 
-preprocessador = ColumnTransformer(
-    transformers=[
-        ('transformer_num', transformer_num, colunas_num),
-        ('transformer_cat', transformer_cat, colunas_cat)])
+transformer_cat = (SimpleImputer(strategy='constant'),
+                   OneHotEncoder(handle_unknown='ignore'))
+
+"""E podemos especificar o nome de cada um desses processos."""
+
+transformer_cat = ('simple imputer', SimpleImputer(strategy='constant')),('one hot encoder', OneHotEncoder(handle_unknown='ignore'))
+
+"""Podemos também colocar essas tuplas em uma lista."""
+
+transformer_cat = [('simple imputer', SimpleImputer(strategy='constant')),
+                   ('one hot encoder', OneHotEncoder(handle_unknown='ignore'))]
+
+"""Como temos o passo 1 que é usar o simple imputer e o passo 2 que é usar o one hot ecoding, vou chamar a nossa lista de steps.
+
+Isso lembra alguma coisa? Sim aquela pipeline que tinha os steps.
+"""
+
+steps=[('imputer', SimpleImputer(strategy='constant')),
+       ('onehot', OneHotEncoder(handle_unknown='ignore'))]
+
+"""Repare que aqui nas variáveis categóricas já temos duas coisas acontecendo, dois passos, portanto, podemos usar uma pipeline."""
+
+transformer_cat = Pipeline(steps)
+
+"""Agora vamos pegar cada um desses transformers e também colocá-los em uma lista."""
+
+transformers=[('transformer_num', transformer_num, colunas_num),
+              ('transformer_cat', transformer_cat, colunas_cat)]
+
+"""E vamos definir o nosso preprocessador, ele faz o que? Pre processa as nossas colunas, certo? Então vai ser uma classe do tipo ColumnTransformer que recebe os nossos transformers."""
+
+preprocessador = ColumnTransformer(transformers)
+
+"""Se olharmos no exemplo da pipeline inicial, temos os preprocessadores e o modelo, certo? Então vamos definir o modelo."""
 
 modelo = RandomForestRegressor(n_estimators=50, random_state=42)
 
+"""Com modelo e preprocessador definidos, basta reunirmos ambos em steps e colocá-los dentro de uma pipeline."""
+
 pipeline_1 = Pipeline(steps=[('preprocessador', preprocessador),
-                      ('modelo', modelo)])
+                             ('modelo', modelo)])
+
+"""Repare que é melhor declarar os steps dentro do objeto, uma vez que ele fica atrelado à uma pipeline específica.
+
+Pronto, agora temos a nossa pipeline pronta e sempre que tivermos algum dado, ao invés de fazermos manualmente como até agora, ele irá passar pelos imputers e one hot encoding automaticamente.
+
+Assim como para um modelo, temos os métodos fit e predict, veja que não precisamos mais 'arrumar' os dados agora que temos a pipeline.
+"""
 
 pipeline_1.fit(X_treino_selec, y_treino)
 
@@ -96,6 +140,8 @@ preds = pipeline_1.predict(X_valid_selec)
 print('MAE:', mean_absolute_error(y_valid, preds))
 
 preds_teste = pipeline_1.predict(X_teste_selec)
+
+"""E pronto, agora basta salvarmos o resultado em um csv."""
 
 resultado = pd.DataFrame({'Id': X_teste_selec.index,
                        'SalePrice': preds_teste})
